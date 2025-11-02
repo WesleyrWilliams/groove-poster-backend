@@ -43,9 +43,8 @@ export default function Home() {
       setUploadStatus({
         status: 'success',
         message: mode === 'url' 
-          ? `Video sent to Vizard! Processing started. Project ID: ${response.data?.projectId || 'N/A'}`
-          : `Channel monitoring started! Videos will be processed automatically.`,
-        projectId: response.data?.projectId,
+          ? `Video processing started! AI is finding viral moments and generating captions.`
+          : `Channel monitoring started! AI will automatically process new videos.`,
       })
     } catch (error: any) {
       setUploadStatus({
@@ -65,11 +64,14 @@ export default function Home() {
           <div className="flex items-center justify-center gap-3 mb-4">
             <Sparkles className="w-8 h-8 text-primary-600" />
             <h1 className="text-4xl font-bold text-gray-900">
-              Shorts Generator
+              🎉 GrooveSzn
             </h1>
           </div>
-          <p className="text-lg text-gray-600">
-            Automatically create and upload short-form videos to TikTok, Instagram, YouTube Shorts, and Facebook
+          <p className="text-lg text-gray-600 mb-2">
+            AI-Powered Shorts Generator - 100% FREE
+          </p>
+          <p className="text-sm text-gray-500">
+            Automatically create and upload viral shorts to TikTok, Instagram, YouTube Shorts, and Facebook
           </p>
         </div>
 
