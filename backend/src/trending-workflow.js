@@ -264,7 +264,10 @@ export async function extractBestClip(videoId) {
     const bestMoment = bestMoments[0]; // Take the top moment
     
     // Generate caption
-    const caption = await generateCaption(bestMoment.text || transcript[0].text);
+    const captionResponse = await generateCaption(bestMoment.text || transcript[0].text);
+    const caption = typeof captionResponse === 'object' && captionResponse.caption 
+      ? captionResponse.caption 
+      : (typeof captionResponse === 'string' ? captionResponse : JSON.stringify(captionResponse));
     
     return {
       videoId,
@@ -315,12 +318,26 @@ Return ONLY valid JSON in this exact format:
 
     const response = await generateCaption(prompt);
     
-    // Try to parse JSON from response
+    // Handle response - generateCaption returns {caption: "..."} or parsed JSON
     let moment;
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      let responseText = '';
+      if (typeof response === 'object' && response.caption) {
+        responseText = response.caption;
+      } else if (typeof response === 'string') {
+        responseText = response;
+      } else {
+        responseText = JSON.stringify(response);
+      }
+      
+      // Try to parse JSON from response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         moment = JSON.parse(jsonMatch[0]);
+        // Validate moment has required fields
+        if (!moment.start || !moment.end) {
+          throw new Error('Invalid moment format');
+        }
       } else {
         throw new Error('No JSON found');
       }
