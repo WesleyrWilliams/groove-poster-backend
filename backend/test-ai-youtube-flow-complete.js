@@ -14,7 +14,7 @@ import { google } from 'googleapis';
 import { getAccessToken } from './src/oauth-tokens.js';
 import { getVideoDetails, searchTrendingVideos } from './src/youtube-fetcher.js';
 import { generateCaption } from './src/openrouter.js';
-import { processVideo } from './src/video-processor.js';
+import { processVideo } from './src/video-processor-fixed.js';
 import { uploadVideoToYouTube } from './src/youtube-upload.js';
 import { saveToGoogleSheets } from './src/trending-workflow.js';
 import axios from 'axios';
