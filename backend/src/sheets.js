@@ -1,16 +1,18 @@
 import { google } from 'googleapis';
+import { getAccessToken } from './oauth-tokens.js';
 
 let sheetsClient = null;
 
 async function getSheetsClient() {
   if (sheetsClient) return sheetsClient;
   
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS || '{}'),
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
+  // Use OAuth access token instead of service account
+  const accessToken = await getAccessToken();
   
-  sheetsClient = google.sheets({ version: 'v4', auth });
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  
+  sheetsClient = google.sheets({ version: 'v4', auth: oauth2Client });
   return sheetsClient;
 }
 

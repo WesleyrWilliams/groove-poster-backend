@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { processVideoWithFreeTools, processChannelAutomatically } from './src/new-workflow.js';
 import { logRefreshToken } from './src/oauth-tokens.js';
+import { runTrendingWorkflow } from './src/trending-workflow.js';
 
 dotenv.config();
 
@@ -27,7 +28,8 @@ app.get('/', (req, res) => {
       terms: '/terms',
       oauth2: '/oauth2 (one-time setup)',
       oauth2Callback: '/oauth2callback',
-      oauth2Test: '/oauth2/test (test auto-connection)'
+      oauth2Test: '/oauth2/test (test auto-connection)',
+      trendingWorkflow: '/api/trending-workflow (run full trending flow)'
     }
   });
 });
@@ -368,6 +370,57 @@ app.get('/oauth2/test', async (req, res) => {
       error: 'Failed to get access token',
       message: error.message,
       hint: 'Make sure GOOGLE_REFRESH_TOKEN is set correctly in environment variables'
+    });
+  }
+});
+
+// Trending Workflow - Full AI Clip Fetcher Integration
+app.post('/api/trending-workflow', async (req, res) => {
+  try {
+    const { 
+      maxResults = 20,
+      topCount = 5,
+      extractClip = true,
+      uploadToYouTube = false
+    } = req.body;
+    
+    console.log(`\n🚀 Starting Trending Workflow...`);
+    console.log(`   Max Results: ${maxResults}`);
+    console.log(`   Top Count: ${topCount}`);
+    console.log(`   Extract Clip: ${extractClip}`);
+    console.log(`   Upload to YouTube: ${uploadToYouTube}\n`);
+    
+    // Run workflow asynchronously
+    runTrendingWorkflow({
+      maxResults,
+      topCount,
+      extractClip,
+      uploadToYouTube
+    }).then(result => {
+      console.log('\n✅ Trending workflow completed successfully');
+      console.log(`   Selected ${result.videos?.length || 0} top videos`);
+      if (result.clip) {
+        console.log(`   Best clip extracted: ${result.clip.startTime}s - ${result.clip.endTime}s`);
+      }
+    }).catch(err => {
+      console.error('❌ Trending workflow failed:', err.message);
+    });
+    
+    res.json({
+      success: true,
+      message: 'Trending workflow started',
+      note: 'Processing in background - check logs for progress',
+      options: {
+        maxResults,
+        topCount,
+        extractClip,
+        uploadToYouTube
+      }
+    });
+  } catch (error) {
+    console.error('Error starting trending workflow:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to start trending workflow',
     });
   }
 });
