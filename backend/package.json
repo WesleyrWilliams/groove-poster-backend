@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test-ai-youtube-flow-openrouter.js",
+    "test:full": "node test-ai-youtube-flow-openrouter.js"
   },
   "keywords": ["shorts", "video", "automation", "social-media"],
   "author": "",
@@ -18,7 +19,9 @@
     "dotenv": "^16.3.1",
     "axios": "^1.6.2",
     "form-data": "^4.0.0",
-    "googleapis": "^129.0.0"
+    "googleapis": "^129.0.0",
+    "ytdl-core": "^4.11.5",
+    "fluent-ffmpeg": "^2.1.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

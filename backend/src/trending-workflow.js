@@ -372,8 +372,11 @@ export async function saveToGoogleSheets(videos) {
 
 /**
  * AI Clip Extraction - Find best moments
+ * @param {string} videoId - YouTube video ID
+ * @param {boolean} processVideo - Whether to actually download and clip the video
+ * @returns {Promise<object>} Clip data with timestamps and optionally videoPath
  */
-export async function extractBestClip(videoId) {
+export async function extractBestClip(videoId, processVideo = false) {
   try {
     console.log(`🎬 Extracting best clip from ${videoId}...`);
     
@@ -401,8 +404,9 @@ export async function extractBestClip(videoId) {
       ? captionResponse.caption 
       : (typeof captionResponse === 'string' ? captionResponse : JSON.stringify(captionResponse));
     
-    return {
+    const clipData = {
       videoId,
+      videoUrl: details.url,
       startTime: bestMoment.start,
       endTime: bestMoment.end,
       duration: bestMoment.end - bestMoment.start,
@@ -411,6 +415,24 @@ export async function extractBestClip(videoId) {
       reason: bestMoment.reason,
       title: details.title
     };
+    
+    // If processVideo is true, actually download and clip the video
+    if (processVideo) {
+      const { processVideo: processVideoFile } = await import('./video-processor.js');
+      
+      const duration = Math.min(Math.max(clipData.duration, 15), 60);
+      const processed = await processVideoFile(
+        details.url,
+        clipData.startTime,
+        duration,
+        clipData.caption || 'Viral Moment 🔥'
+      );
+      
+      clipData.videoPath = processed.videoPath;
+      clipData.cleanup = processed.cleanup;
+    }
+    
+    return clipData;
   } catch (error) {
     console.error('Error extracting clip:', error.message);
     throw error;
@@ -501,40 +523,37 @@ Return ONLY valid JSON in this exact format:
 
 /**
  * Upload to YouTube Shorts
+ * @param {object} clipData - Clip data with videoPath, title, description
+ * @returns {Promise<object>} Upload result
  */
 export async function uploadToYouTubeShorts(clipData) {
   try {
     console.log('📤 Uploading to YouTube Shorts...');
     
-    // Get access token
-    const accessToken = await getAccessToken();
+    // Import upload function
+    const { uploadVideoToYouTube } = await import('./youtube-upload.js');
     
-    // For now, return metadata (actual upload requires video file)
-    // In production, you'd use yt-dlp to download, ffmpeg to clip, then upload
+    // Check if videoPath is provided
+    if (!clipData.videoPath) {
+      throw new Error('videoPath is required for upload');
+    }
     
-    const videoMetadata = {
-      snippet: {
-        title: clipData.caption || clipData.title || 'Viral Short',
-        description: `${clipData.reason}\n\n#shorts #viral #trending`,
-        categoryId: '22', // People & Blogs
-        tags: ['shorts', 'viral', 'trending', 'highlights']
-      },
-      status: {
-        privacyStatus: 'public',
-        selfDeclaredMadeForKids: false
+    const title = clipData.caption || clipData.title || 'Viral Short';
+    const description = `${clipData.reason || 'Viral moment'}\n\n#shorts #viral #trending`;
+    
+    const uploadResult = await uploadVideoToYouTube(
+      clipData.videoPath,
+      title,
+      description,
+      {
+        tags: ['shorts', 'viral', 'trending', 'highlights'],
+        privacyStatus: 'public'
       }
-    };
+    );
     
-    console.log('✅ YouTube Shorts metadata prepared');
-    console.log('📝 Note: Actual video upload requires video file processing');
-    
-    return {
-      success: true,
-      metadata: videoMetadata,
-      note: 'Video file processing required for actual upload'
-    };
+    return uploadResult;
   } catch (error) {
-    console.error('Error preparing YouTube Shorts upload:', error.message);
+    console.error('Error uploading to YouTube Shorts:', error.message);
     throw error;
   }
 }
