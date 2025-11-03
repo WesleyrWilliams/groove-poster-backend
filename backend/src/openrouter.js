@@ -5,7 +5,7 @@ export async function generateCaption(transcript) {
     const response = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
       {
-        model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+        model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.2-3b-instruct:free',
         messages: [
           {
             role: 'system',

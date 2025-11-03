@@ -24,6 +24,7 @@ dotenv.config();
 // Configuration
 const CONFIG = {
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  // Using Meta Llama 3.2 3B Instruct (free) - best for video analysis and viral moment detection
   OPENROUTER_MODEL: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.2-3b-instruct:free',
   SHEET_ID: process.env.GOOGLE_SHEET_ID || process.env.SHEET_ID,
   MAX_RESULTS: parseInt(process.env.MAX_RESULTS) || 5,
