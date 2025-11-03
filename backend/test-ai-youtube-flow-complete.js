@@ -25,17 +25,18 @@ dotenv.config();
 const CONFIG = {
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   OPENROUTER_MODEL: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.2-3b-instruct:free',
-  SHEET_ID: process.env.GOOGLE_SHEET_ID,
+  SHEET_ID: process.env.GOOGLE_SHEET_ID || process.env.SHEET_ID,
   MAX_RESULTS: parseInt(process.env.MAX_RESULTS) || 5,
   CLIP_DURATION: parseInt(process.env.CLIP_DURATION) || 30,
-  UPLOAD_TO_YOUTUBE: process.env.UPLOAD_TO_YOUTUBE === 'true'
+  UPLOAD_TO_YOUTUBE: process.env.UPLOAD_TO_YOUTUBE === 'true',
+  EXTRACT_CLIP: process.env.EXTRACT_CLIP !== 'false' // Default to true unless explicitly false
 };
 
 // Validate configuration
 function validateConfig() {
   const missing = [];
   if (!CONFIG.OPENROUTER_API_KEY) missing.push('OPENROUTER_API_KEY');
-  if (!CONFIG.SHEET_ID) missing.push('GOOGLE_SHEET_ID');
+  if (!CONFIG.SHEET_ID) missing.push('GOOGLE_SHEET_ID or SHEET_ID');
   if (!process.env.YOUTUBE_API_KEY) missing.push('YOUTUBE_API_KEY');
   
   if (missing.length > 0) {
