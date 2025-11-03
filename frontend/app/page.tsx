@@ -64,7 +64,7 @@ const GrooveSznDashboard = () => {
     return () => clearInterval(flowTimer)
   }, [])
 
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
@@ -82,7 +82,7 @@ const GrooveSznDashboard = () => {
     setLogs([newLog, ...logs])
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || `${window.location.origin.replace(':3000', ':3001')}`
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://groove-poster-backend.vercel.app'
       
       if (videoUrl) {
         await axios.post(`${backendUrl}/api/process-video`, { videoUrl })
@@ -104,9 +104,10 @@ const GrooveSznDashboard = () => {
         setLogs([successLog, ...logs])
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
       const errorLog = {
         id: logs.length + 2,
-        message: `❌ Error: ${error.message}`,
+        message: `❌ Error: ${errorMessage}`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         type: 'error'
       }
@@ -116,7 +117,7 @@ const GrooveSznDashboard = () => {
     }
   }
 
-  const StatCard = ({ icon: Icon, title, value, subtitle }) => (
+  const StatCard = ({ icon: Icon, title, value, subtitle }: { icon: React.ElementType, title: string, value: string | number, subtitle: string }) => (
     <div className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition-shadow border border-blue-100">
       <div className="flex items-start justify-between">
         <div>

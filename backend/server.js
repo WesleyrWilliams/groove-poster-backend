@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { processVideoWithFreeTools, processChannelAutomatically } from './src/new-workflow.js';
+import { logRefreshToken } from './src/oauth-tokens.js';
 
 dotenv.config();
 
@@ -24,8 +25,9 @@ app.get('/', (req, res) => {
       processChannel: '/api/process-channel',
       privacy: '/privacy',
       terms: '/terms',
-      oauth2: '/oauth2',
-      oauth2Callback: '/oauth2callback'
+      oauth2: '/oauth2 (one-time setup)',
+      oauth2Callback: '/oauth2callback',
+      oauth2Test: '/oauth2/test (test auto-connection)'
     }
   });
 });
@@ -180,13 +182,33 @@ app.post('/api/process-channel', async (req, res) => {
 // Google OAuth Routes
 app.get('/oauth2', (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://groove-poster-backend.vercel.app/oauth2callback';
-  const scope = encodeURIComponent('https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/spreadsheets');
-  const responseType = 'code';
-  const accessType = 'offline';
-  const prompt = 'consent';
   
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=${responseType}&scope=${scope}&access_type=${accessType}&prompt=${prompt}`;
+  if (!clientId) {
+    return res.status(500).json({ 
+      error: 'GOOGLE_CLIENT_ID not configured',
+      message: 'Please add GOOGLE_CLIENT_ID to your environment variables'
+    });
+  }
+  
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://groove-poster-backend.vercel.app/oauth2callback';
+  
+  // Request scopes needed for YouTube and Sheets
+  const scopes = [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.readonly',
+    'https://www.googleapis.com/auth/spreadsheets'
+  ].join(' ');
+  
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: scopes,
+    access_type: 'offline', // Required to get refresh token
+    prompt: 'consent', // Force consent screen to always get refresh token
+  });
+  
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   
   res.redirect(authUrl);
 });
@@ -228,7 +250,14 @@ app.get('/oauth2callback', async (req, res) => {
       });
     }
 
-    // Success - return tokens (in production, store these securely)
+    // Log refresh token to console (for one-time setup)
+    if (tokens.refresh_token) {
+      logRefreshToken(tokens.refresh_token);
+    } else {
+      console.warn('⚠️ WARNING: No refresh token received! You may need to revoke access and try again with prompt=consent');
+    }
+
+    // Success - return tokens with clear instructions
     res.setHeader('Content-Type', 'text/html');
     res.send(`
       <!DOCTYPE html>
@@ -237,31 +266,69 @@ app.get('/oauth2callback', async (req, res) => {
         <title>OAuth Success - GrooveSzn</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; }
-          h1 { color: #10b981; }
-          .success { background: #d1fae5; padding: 20px; border-radius: 8px; margin: 20px 0; }
-          .token { background: #f3f4f6; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px; margin: 10px 0; }
-          .warning { background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; color: #92400e; }
+          body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
+          h1 { color: #10b981; text-align: center; }
+          .success { background: #d1fae5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981; }
+          .critical { background: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ef4444; }
+          .token { background: #1f2937; color: #10b981; padding: 15px; border-radius: 4px; word-break: break-all; font-size: 13px; font-family: monospace; margin: 10px 0; overflow-x: auto; }
+          .instruction { background: #eff6ff; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb; }
+          .step { margin: 10px 0; padding: 10px; background: #f9fafb; border-radius: 4px; }
+          code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
         </style>
       </head>
       <body>
-        <h1>✅ OAuth Authorization Successful!</h1>
+        <h1>✅ YouTube OAuth Authorization Successful!</h1>
+        
         <div class="success">
-          <p>Your Google account has been successfully authorized.</p>
+          <p><strong>🎉 Your Google account has been successfully authorized!</strong></p>
+          <p>You can now close this tab. The backend will automatically connect to YouTube forever.</p>
         </div>
-        <div class="warning">
-          <strong>⚠️ Important:</strong> Store these tokens securely. In production, these should be saved to a database or secure storage.
-        </div>
-        <h3>Access Token:</h3>
-        <div class="token">${tokens.access_token || 'N/A'}</div>
+
         ${tokens.refresh_token ? `
-          <h3>Refresh Token:</h3>
-          <div class="token">${tokens.refresh_token}</div>
-        ` : ''}
-        <p><strong>Expires in:</strong> ${tokens.expires_in || 'N/A'} seconds</p>
-        <p><strong>Token type:</strong> ${tokens.token_type || 'Bearer'}</p>
-        <p style="margin-top: 30px;">
-          <a href="/" style="color: #2563eb; text-decoration: none;">← Back to API</a>
+          <div class="critical">
+            <h3>⚠️ CRITICAL: Save Your Refresh Token</h3>
+            <p><strong>This refresh token is permanent and lets your backend connect automatically forever.</strong></p>
+            <p><strong>Copy this refresh token and add it to Vercel environment variables:</strong></p>
+            <div class="token">${tokens.refresh_token}</div>
+            <div class="instruction">
+              <h4>📝 Steps to Complete Setup:</h4>
+              <div class="step">
+                <strong>1. Go to Vercel Dashboard:</strong><br>
+                → Your <code>groove-poster-backend</code> project<br>
+                → Settings → Environment Variables
+              </div>
+              <div class="step">
+                <strong>2. Add New Variable:</strong><br>
+                Variable Name: <code>GOOGLE_REFRESH_TOKEN</code><br>
+                Value: <code>${tokens.refresh_token}</code>
+              </div>
+              <div class="step">
+                <strong>3. Redeploy:</strong><br>
+                After adding, redeploy your backend. That's it! 🎉
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="critical">
+            <h3>⚠️ WARNING: No Refresh Token Received</h3>
+            <p>You may need to revoke access and try again. Make sure:</p>
+            <ul>
+              <li>You used <code>prompt=consent</code> in the OAuth URL</li>
+              <li>You clicked "Allow" on all permission screens</li>
+            </ul>
+            <p><a href="/oauth2" style="color: #2563eb;">Try Again →</a></p>
+          </div>
+        `}
+
+        <div class="instruction">
+          <h3>📊 Token Information:</h3>
+          <p><strong>Access Token:</strong> <span style="color: #6b7280;">(expires in ${tokens.expires_in || 'N/A'} seconds)</span></p>
+          <p><strong>Token Type:</strong> ${tokens.token_type || 'Bearer'}</p>
+          <p><strong>Scope:</strong> ${tokens.scope || 'N/A'}</p>
+        </div>
+
+        <p style="text-align: center; margin-top: 30px;">
+          <a href="/" style="color: #2563eb; text-decoration: none; font-weight: bold;">← Back to API</a>
         </p>
       </body>
       </html>
@@ -271,6 +338,36 @@ app.get('/oauth2callback', async (req, res) => {
     res.status(500).json({ 
       error: 'OAuth callback failed', 
       message: error.message 
+    });
+  }
+});
+
+// Test OAuth connection (auto-refresh)
+app.get('/oauth2/test', async (req, res) => {
+  try {
+    const { getAccessToken, hasRefreshToken } = await import('./src/oauth-tokens.js');
+    
+    if (!hasRefreshToken()) {
+      return res.status(400).json({
+        error: 'Refresh token not configured',
+        message: 'Please complete the one-time OAuth setup first by visiting /oauth2',
+        instructions: '1. Visit /oauth2 to authorize\n2. Copy the refresh token\n3. Add GOOGLE_REFRESH_TOKEN to environment variables\n4. Redeploy'
+      });
+    }
+
+    const accessToken = await getAccessToken();
+    
+    res.json({
+      success: true,
+      message: '✅ Automatic YouTube connection working!',
+      accessToken: accessToken.substring(0, 20) + '...',
+      note: 'Access token refreshed automatically. You can now use YouTube APIs without manual authorization.'
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get access token',
+      message: error.message,
+      hint: 'Make sure GOOGLE_REFRESH_TOKEN is set correctly in environment variables'
     });
   }
 });

@@ -30,10 +30,11 @@ export async function POST(request: NextRequest) {
     const data = await response.json()
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     console.error('API error:', error)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
