@@ -133,25 +133,33 @@ app.post('/api/process-video', async (req, res) => {
       return res.status(400).json({ error: 'videoUrl is required' });
     }
 
-    console.log(`\n🚀 New request: Process video ${videoUrl}`);
-    
-    // Process asynchronously
-    processVideoWithFreeTools(videoUrl).then(result => {
-      console.log('✅ Video processed successfully');
-    }).catch(err => {
-      console.error('❌ Video processing failed:', err.message);
-    });
-    
+    // Return immediately - process in background
     res.json({
       success: true,
       message: 'Video processing started (FREE AI-powered)',
-      note: 'Processing in background',
+      note: 'Processing in background - check logs for progress',
+      videoUrl
+    });
+    
+    // Process asynchronously after response is sent
+    setImmediate(async () => {
+      try {
+        console.log(`\n🚀 Processing video in background: ${videoUrl}`);
+        const result = await processVideoWithFreeTools(videoUrl);
+        console.log('✅ Video processed successfully:', result);
+      } catch (err) {
+        console.error('❌ Video processing failed:', err.message);
+        console.error(err.stack);
+      }
     });
   } catch (error) {
     console.error('Error starting video processing:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to start video processing',
-    });
+    // Only send error if response hasn't been sent
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: error.message || 'Failed to start video processing',
+      });
+    }
   }
 });
 

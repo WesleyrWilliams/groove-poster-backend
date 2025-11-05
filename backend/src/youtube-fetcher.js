@@ -69,6 +69,21 @@ export async function getVideoDetails(videoId) {
   try {
     const apiKey = process.env.YOUTUBE_API_KEY;
     
+    if (!apiKey) {
+      console.warn('⚠️ YOUTUBE_API_KEY not set, skipping video details fetch');
+      return {
+        videoId,
+        title: 'Video',
+        description: '',
+        thumbnail: '',
+        publishedAt: new Date().toISOString(),
+        duration: 0,
+        viewCount: 0,
+        likeCount: 0,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+      };
+    }
+    
     const response = await axios.get(
       'https://www.googleapis.com/youtube/v3/videos',
       {
@@ -77,6 +92,7 @@ export async function getVideoDetails(videoId) {
           id: videoId,
           part: 'snippet,statistics,contentDetails',
         },
+        timeout: 10000, // 10 second timeout
       }
     );
     
@@ -97,8 +113,33 @@ export async function getVideoDetails(videoId) {
       url: `https://www.youtube.com/watch?v=${video.id}`,
     };
   } catch (error) {
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      console.warn('⚠️ YouTube API timeout, using minimal details');
+      return {
+        videoId,
+        title: 'Video',
+        description: '',
+        thumbnail: '',
+        publishedAt: new Date().toISOString(),
+        duration: 0,
+        viewCount: 0,
+        likeCount: 0,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+      };
+    }
     console.error('Error fetching video details:', error.response?.data || error.message);
-    throw new Error('Failed to fetch video details');
+    // Return minimal details instead of throwing to avoid blocking
+    return {
+      videoId,
+      title: 'Video',
+      description: '',
+      thumbnail: '',
+      publishedAt: new Date().toISOString(),
+      duration: 0,
+      viewCount: 0,
+      likeCount: 0,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+    };
   }
 }
 

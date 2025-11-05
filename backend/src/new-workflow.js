@@ -13,10 +13,30 @@ export async function processVideoWithFreeTools(videoUrl, options = {}) {
       throw new Error('Invalid YouTube URL');
     }
     
-    // Step 1: Get video details
-    console.log('📊 Fetching video details...');
-    const videoDetails = await getVideoDetails(videoId);
-    console.log(`✅ Found: "${videoDetails.title}"`);
+    // Step 1: Get video details (with timeout - don't block if slow)
+    let videoDetails;
+    try {
+      console.log('📊 Fetching video details...');
+      const detailsPromise = getVideoDetails(videoId);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 5000)
+      );
+      videoDetails = await Promise.race([detailsPromise, timeoutPromise]);
+      console.log(`✅ Found: "${videoDetails.title}"`);
+    } catch (error) {
+      console.warn('⚠️ Video details fetch timed out or failed, continuing with minimal details');
+      videoDetails = {
+        videoId,
+        title: 'Video',
+        description: '',
+        thumbnail: '',
+        publishedAt: new Date().toISOString(),
+        duration: 0,
+        viewCount: 0,
+        likeCount: 0,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+      };
+    }
     
     // Step 2: Get transcript (free)
     console.log('📝 Getting transcript...');
