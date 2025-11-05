@@ -66,3 +66,6 @@ SETUP_CHECKLIST.md
 WORKFLOW_ANALYSIS.md
 SETUP_API_KEY.md
 PREVIEW.md
+cookies.txt
+backend/.env.bak
+backend/VERCEL_ENV_SETUP.md

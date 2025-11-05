@@ -4,8 +4,12 @@ import dotenv from 'dotenv';
 import { processVideoWithFreeTools, processChannelAutomatically } from './src/new-workflow.js';
 import { logRefreshToken } from './src/oauth-tokens.js';
 import { runTrendingWorkflow } from './src/trending-workflow.js';
+import startWhisperPinger from './utils/pingWhisper.js';
 
 dotenv.config();
+
+// Start pinging Hugging Face Whisper Space every 5 minutes to keep it awake
+startWhisperPinger();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

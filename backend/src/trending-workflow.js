@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getAccessToken } from './oauth-tokens.js';
 import { getVideoDetails, searchTrendingVideos } from './youtube-fetcher.js';
 import { getTranscript } from './transcript-api.js';
-import { generateCaption } from './openrouter.js';
+import { generateCaption, generateVideoAnalysis } from './openrouter.js';
 import { google } from 'googleapis';
 
 // Popular creators to monitor
@@ -371,12 +371,13 @@ export async function saveToGoogleSheets(videos) {
 }
 
 /**
- * AI Clip Extraction - Find best moments
+ * AI Clip Extraction - Find best moments using enhanced analysis
  * @param {string} videoId - YouTube video ID
  * @param {boolean} processVideo - Whether to actually download and clip the video
+ * @param {object} options - Processing options
  * @returns {Promise<object>} Clip data with timestamps and optionally videoPath
  */
-export async function extractBestClip(videoId, processVideo = false) {
+export async function extractBestClip(videoId, processVideo = false, options = {}) {
   try {
     console.log(`🎬 Extracting best clip from ${videoId}...`);
     
@@ -389,43 +390,74 @@ export async function extractBestClip(videoId, processVideo = false) {
     // Get video details
     const details = await getVideoDetails(videoId);
     
-    // Use AI to find best moment
-    const bestMoments = await findBestMomentWithAI(transcript, details);
-    
-    if (bestMoments.length === 0) {
-      throw new Error('No engaging moments found');
+    // Use enhanced AI analysis to get title, timestamps, and hashtags
+    console.log(`🤖 Analyzing video with AI for best clip...`);
+    let analysis;
+    try {
+      analysis = await generateVideoAnalysis(details, transcript);
+      console.log(`✅ AI Analysis complete:`);
+      console.log(`   Reason: ${analysis.reason || 'N/A'}`);
+      console.log(`   Title: ${analysis.title || 'N/A'}`);
+      console.log(`   Clips found: ${analysis.clips?.length || 0}`);
+    } catch (analysisError) {
+      console.warn(`⚠️ Enhanced analysis failed, falling back to basic analysis:`, analysisError.message);
+      // Fallback to basic analysis
+      const bestMoments = await findBestMomentWithAI(transcript, details);
+      if (bestMoments.length === 0) {
+        throw new Error('No engaging moments found');
+      }
+      const bestMoment = bestMoments[0];
+      analysis = {
+        reason: bestMoment.reason || 'AI-selected engaging moment',
+        clips: [{
+          startSeconds: bestMoment.start,
+          endSeconds: bestMoment.end,
+          reason: bestMoment.reason
+        }],
+        title: bestMoment.text?.substring(0, 100) || details.title || 'Viral Moment',
+        subtitle: '',
+        hashtags: ['#viral', '#shorts', '#trending']
+      };
     }
     
-    const bestMoment = bestMoments[0]; // Take the top moment
-    
-    // Generate caption
-    const captionResponse = await generateCaption(bestMoment.text || transcript[0].text);
-    const caption = typeof captionResponse === 'object' && captionResponse.caption 
-      ? captionResponse.caption 
-      : (typeof captionResponse === 'string' ? captionResponse : JSON.stringify(captionResponse));
+    // Get best clip from analysis
+    const bestClip = analysis.clips && analysis.clips.length > 0 
+      ? analysis.clips[0] 
+      : { startSeconds: 0, endSeconds: 30, reason: 'Default clip' };
     
     const clipData = {
       videoId,
       videoUrl: details.url,
-      startTime: bestMoment.start,
-      endTime: bestMoment.end,
-      duration: bestMoment.end - bestMoment.start,
-      text: bestMoment.text,
-      caption,
-      reason: bestMoment.reason,
-      title: details.title
+      startTime: bestClip.startSeconds || bestClip.start || 0,
+      endTime: bestClip.endSeconds || bestClip.end || 30,
+      duration: (bestClip.endSeconds || bestClip.end || 30) - (bestClip.startSeconds || bestClip.start || 0),
+      text: bestClip.text || transcript[0]?.text || '',
+      caption: analysis.title || 'Viral Moment 🔥',
+      subtitle: analysis.subtitle || '',
+      reason: analysis.reason || bestClip.reason || 'AI-selected engaging moment',
+      title: analysis.title || details.title || 'Viral Moment',
+      hashtags: analysis.hashtags || ['#viral', '#shorts', '#trending']
     };
     
-    // If processVideo is true, actually download and clip the video
+    // If processVideo is true, process with enhanced video processor
     if (processVideo) {
-      const { processVideo: processVideoFile } = await import('./video-processor.js');
+      const { processVideoToShort } = await import('./video-processor-enhanced.js');
       
       const duration = Math.min(Math.max(clipData.duration, 15), 60);
-      const processed = await processVideoFile(
+      
+      // Process video with 9:16 layout
+      const processed = await processVideoToShort(
         details.url,
         clipData.startTime,
         duration,
-        clipData.caption || 'Viral Moment 🔥'
+        {
+          title: clipData.title || clipData.caption,
+          subtitle: clipData.subtitle,
+          watermarkPath: options.watermarkPath || null,
+          subtitleFile: options.subtitleFile || null,
+          titleFontSize: options.titleFontSize || 56,
+          subtitleFontSize: options.subtitleFontSize || 34
+        }
       );
       
       clipData.videoPath = processed.videoPath;
@@ -538,15 +570,19 @@ export async function uploadToYouTubeShorts(clipData) {
       throw new Error('videoPath is required for upload');
     }
     
-    const title = clipData.caption || clipData.title || 'Viral Short';
-    const description = `${clipData.reason || 'Viral moment'}\n\n#shorts #viral #trending`;
+    const title = clipData.title || clipData.caption || 'Viral Short';
+    const hashtags = clipData.hashtags || ['#shorts', '#viral', '#trending'];
+    const description = `${clipData.reason || 'Viral moment'}\n\n${hashtags.join(' ')}`;
+    
+    // Convert hashtags to tags (remove #)
+    const tags = hashtags.map(tag => tag.replace('#', '')).filter(tag => tag.length > 0);
     
     const uploadResult = await uploadVideoToYouTube(
       clipData.videoPath,
       title,
       description,
       {
-        tags: ['shorts', 'viral', 'trending', 'highlights'],
+        tags: tags.length > 0 ? tags : ['shorts', 'viral', 'trending', 'highlights'],
         privacyStatus: 'public'
       }
     );
@@ -618,18 +654,31 @@ export async function runTrendingWorkflow(options = {}) {
       console.log(`   Video ID: ${topVideo.videoId}`);
       console.log(`   URL: ${topVideo.url}\n`);
       
-      const clip = await extractBestClip(topVideo.videoId);
+      // Extract clip with enhanced processing
+      const clip = await extractBestClip(topVideo.videoId, options.processVideo, {
+        watermarkPath: options.watermarkPath || null,
+        subtitleFile: options.subtitleFile || null,
+        titleFontSize: options.titleFontSize || 56,
+        subtitleFontSize: options.subtitleFontSize || 34
+      });
       
       console.log(`\n✅ BEST CLIP EXTRACTED:`);
       console.log(`   Start Time: ${clip.startTime}s`);
       console.log(`   End Time: ${clip.endTime}s`);
       console.log(`   Duration: ${clip.duration}s`);
       console.log(`   🎯 Reason: ${clip.reason}`);
-      console.log(`   📝 Caption: ${clip.caption}`);
-      console.log(`   📄 Text: ${clip.text?.substring(0, 100)}...\n`);
+      console.log(`   📝 Title: ${clip.title}`);
+      console.log(`   📝 Subtitle: ${clip.subtitle || 'N/A'}`);
+      console.log(`   🏷️  Hashtags: ${clip.hashtags?.join(' ') || 'N/A'}`);
+      console.log(`   📄 Text: ${clip.text?.substring(0, 100)}...`);
+      if (clip.videoPath) {
+        console.log(`   📹 Video Path: ${clip.videoPath}\n`);
+      } else {
+        console.log(`   ⏭️  Video processing skipped\n`);
+      }
       
       // Step 6: Upload to YouTube Shorts (if enabled)
-      if (options.uploadToYouTube) {
+      if (options.uploadToYouTube && clip.videoPath) {
         console.log('\n═══════════════════════════════════════════════════════════');
         console.log('📤 STEP 6: UPLOADING TO YOUTUBE SHORTS');
         console.log('═══════════════════════════════════════════════════════════\n');
