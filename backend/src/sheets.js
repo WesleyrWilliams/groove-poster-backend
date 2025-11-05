@@ -20,7 +20,7 @@ export async function saveToGoogleSheets(data) {
   try {
     const client = await getSheetsClient();
     const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-    const sheetName = 'Shorts';
+    const sheetName = 'GrooveSzn Auto Clipper';
     
     await client.spreadsheets.values.append({
       spreadsheetId,
