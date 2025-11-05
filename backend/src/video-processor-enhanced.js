@@ -173,12 +173,25 @@ export async function processShortVideo(inputPath, outputPath, options = {}) {
     );
     
     // Step 3: Add title text (centered in white box)
-    const titleY = titleBoxY + 40; // Center vertically in box (approx)
+    // Calculate title Y position to center vertically in the box
+    const titleY = titleBoxY + (titleBoxHeight / 2) - (titleFontSize / 2) + 10; // Center with slight offset
     const fontParam = fontPath ? `:fontfile='${fontPath}'` : '';
     
     if (title) {
+      // Wrap long titles by reducing font size if needed
+      let finalTitle = escapedTitle;
+      let finalFontSize = titleFontSize;
+      
+      // Estimate if title is too long (rough calculation: ~15 chars per 100px at 56px font)
+      const maxChars = Math.floor((titleBoxWidth - 40) / (titleFontSize * 0.6));
+      if (escapedTitle.length > maxChars) {
+        // Reduce font size proportionally
+        finalFontSize = Math.max(40, Math.floor(titleFontSize * (maxChars / escapedTitle.length)));
+        console.log(`   ⚠️ Title too long, reducing font size to ${finalFontSize}px`);
+      }
+      
       filters.push(
-        `[boxed]drawtext=text='${escapedTitle}':fontcolor=black:fontsize=${titleFontSize}:x=(w-text_w)/2:y=${titleY}:box=0${fontParam}[titled]`
+        `[boxed]drawtext=text='${finalTitle}':fontcolor=black:fontsize=${finalFontSize}:x=(w-text_w)/2:y=${titleY}:box=0${fontParam}[titled]`
       );
     } else {
       filters.push(`[boxed]copy[titled]`);
@@ -194,20 +207,25 @@ export async function processShortVideo(inputPath, outputPath, options = {}) {
       currentLabel = 'subtitled';
     }
     
-    // Step 5: Add watermark if provided
-    if (hasWatermark) {
-      filters.push(
-        `[${currentLabel}][1:v]overlay=W-w-24:H-h-24[watermarked]`
-      );
-      currentLabel = 'watermarked';
-    }
-    
     // Build FFmpeg command
     let command = `"${ffmpeg}" -y -i "${inputPath}"`;
     
-    // Add watermark input if provided
+    // Add watermark input if provided (must be before filter_complex)
     if (hasWatermark) {
       command += ` -i "${watermarkPath}"`;
+    }
+    
+    // Step 5: Add watermark if provided (after we know input index)
+    if (hasWatermark) {
+      // Resize watermark to appropriate size (max 200px width) and overlay at bottom-right
+      // Input [1:v] is the watermark image
+      filters.push(
+        `[1:v]scale=200:-1[watermark]`
+      );
+      filters.push(
+        `[${currentLabel}][watermark]overlay=W-w-24:H-h-24[watermarked]`
+      );
+      currentLabel = 'watermarked';
     }
     
     // Add subtitle file if provided (using separate -vf filter after main chain)
