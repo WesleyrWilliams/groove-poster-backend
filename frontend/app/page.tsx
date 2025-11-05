@@ -4,10 +4,27 @@ import React, { useState, useEffect } from 'react'
 import { Play, Pause, RefreshCw, Settings, Video, Clock, TrendingUp, CheckCircle, AlertCircle, Trash2, Edit, Upload } from 'lucide-react'
 import axios from 'axios'
 
+interface LogEntry {
+  id: number
+  message: string
+  time: string
+  type: 'success' | 'processing' | 'search' | 'upload' | 'trigger' | 'error'
+}
+
+interface ContentItem {
+  id: number
+  title: string
+  status: string
+  platform: string
+  thumbnail: string
+  link?: string
+  channel?: string
+}
+
 const GrooveSznDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [automationActive, setAutomationActive] = useState(true)
-  const [logs, setLogs] = useState([])
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [postingInterval, setPostingInterval] = useState('1')
   const [batchSize, setBatchSize] = useState('5')
   const [platformPriority, setPlatformPriority] = useState('both')
@@ -30,7 +47,7 @@ const GrooveSznDashboard = () => {
     pendingQueue: 0,
     automationStatus: 'Active'
   })
-  const [contentLibrary, setContentLibrary] = useState([])
+  const [contentLibrary, setContentLibrary] = useState<ContentItem[]>([])
   const [isLoadingStats, setIsLoadingStats] = useState(true)
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://groove-poster-backend.vercel.app'
@@ -139,8 +156,8 @@ const GrooveSznDashboard = () => {
     return `${hrs}h ${mins}m ${secs}s`
   }
 
-  const addLog = (message: string, type: string = 'processing') => {
-    const newLog = {
+  const addLog = (message: string, type: LogEntry['type'] = 'processing') => {
+    const newLog: LogEntry = {
       id: Date.now(),
       message,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -208,7 +225,7 @@ const GrooveSznDashboard = () => {
       }
 
       // Simulate progress
-      const progressSteps = [
+      const progressSteps: Array<{ step: number, message: string, type: LogEntry['type'] }> = [
         { step: 0, message: '📊 Fetching video details...', type: 'search' },
         { step: 1, message: '📝 Getting transcript...', type: 'processing' },
         { step: 2, message: '🤖 AI analyzing for best clips...', type: 'processing' },
