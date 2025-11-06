@@ -1,8 +1,12 @@
 // In-memory log storage for workflow logs
 // In production, this could be replaced with Redis, database, or file storage
+// Logs are cleared on server restart (Vercel serverless functions reset on each deployment)
 
 const logs = [];
 const MAX_LOGS = 500; // Keep last 500 logs (reduced to clear old logs faster)
+
+// Clear logs on module load (server restart)
+logs.length = 0;
 
 /**
  * Add a log entry

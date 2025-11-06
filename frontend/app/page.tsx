@@ -21,6 +21,22 @@ interface ContentItem {
   channel?: string
 }
 
+// AddLog utility to resolve usage of addLog across the file
+const useAddLog = (setLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>) => {
+  // Just adds a log entry to local logs
+  return (message: string, type: LogEntry['type']) => {
+    setLogs(prevLogs => [
+      ...prevLogs,
+      {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        message,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type
+      }
+    ])
+  }
+}
+
 const GrooveSznDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [automationActive, setAutomationActive] = useState(true)
@@ -60,6 +76,9 @@ const GrooveSznDashboard = () => {
     { icon: '📤', label: 'Post', color: 'bg-orange-500' },
     { icon: '✅', label: 'Complete', color: 'bg-teal-500' }
   ]
+
+  // --- ADD LOCAL addLog that just logs to the UI ---
+  const addLog = useAddLog(setLogs)
 
   // Fetch stats on mount and periodically
   useEffect(() => {
@@ -196,9 +215,18 @@ const GrooveSznDashboard = () => {
         // Update flow step based on log types
         const hasSearch = newLogs.some(log => log.type === 'search')
         const hasClip = newLogs.some(log => log.message.includes('clip') || log.message.includes('Clipping'))
-        const hasTranscribe = newLogs.some(log => log.type === 'transcribe')
+        // FIX: type 'transcribe' (not valid), so detect by message instead
+        const hasTranscribe =
+          newLogs.some(
+            log =>
+              log.type === 'processing' &&
+              (log.message.toLowerCase().includes('transcribe') ||
+                log.message.toLowerCase().includes('transcription'))
+          )
         const hasUpload = newLogs.some(log => log.type === 'upload')
-        const hasComplete = newLogs.some(log => log.type === 'complete' || log.type === 'success')
+        // FIX: type 'complete' not in LogEntry, so just check for 'success'
+        const hasComplete =
+          newLogs.some(log => log.type === 'success' && (log.message.toLowerCase().includes('complete') || log.message.toLowerCase().includes('completed')))
         
         let step = -1
         if (hasComplete) step = 4
@@ -210,7 +238,7 @@ const GrooveSznDashboard = () => {
         setFlowStep(step)
         
         // Check if workflow is complete
-        if (hasComplete || newLogs.some(log => log.type === 'error' && log.message.includes('completed'))) {
+        if (hasComplete || newLogs.some(log => log.type === 'error' && log.message.toLowerCase().includes('completed'))) {
           setIsFlowRunning(false)
         }
       })
@@ -219,17 +247,18 @@ const GrooveSznDashboard = () => {
     return () => clearInterval(interval)
   }, [currentWorkflowId, isFlowRunning, backendUrl])
 
-  // Fetch all logs on mount and periodically (only if there are logs)
+  // Clear logs on mount and only fetch when workflow is running
   useEffect(() => {
-    // Start with empty logs - only fetch if a workflow is running
+    // Start with empty logs - clear backend logs on mount
     setLogs([])
+    axios.get(`${backendUrl}/api/logs?clear=true`).catch(() => {}) // Clear backend logs silently
     
+    // Only fetch logs if a workflow is running
     const interval = setInterval(() => {
-      // Only fetch logs if a workflow is running or if we have a workflow ID
-      if (isFlowRunning || currentWorkflowId) {
+      if (isFlowRunning && currentWorkflowId) {
         fetchLogs(currentWorkflowId)
       }
-    }, 10000) // Refresh every 10 seconds when running
+    }, 2000) // Poll every 2 seconds when running
     return () => clearInterval(interval)
   }, [backendUrl, isFlowRunning, currentWorkflowId])
 
