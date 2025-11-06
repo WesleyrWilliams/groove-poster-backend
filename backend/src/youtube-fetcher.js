@@ -66,22 +66,25 @@ export async function searchTrendingVideos(query, maxResults = 10) {
 }
 
 export async function getVideoDetails(videoId) {
+  // Always return a valid result, never throw
+  const minimalDetails = {
+    videoId,
+    title: 'Video',
+    description: '',
+    thumbnail: '',
+    publishedAt: new Date().toISOString(),
+    duration: 0,
+    viewCount: 0,
+    likeCount: 0,
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+  };
+
   try {
     const apiKey = process.env.YOUTUBE_API_KEY;
     
     if (!apiKey) {
-      console.warn('⚠️ YOUTUBE_API_KEY not set, skipping video details fetch');
-      return {
-        videoId,
-        title: 'Video',
-        description: '',
-        thumbnail: '',
-        publishedAt: new Date().toISOString(),
-        duration: 0,
-        viewCount: 0,
-        likeCount: 0,
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-      };
+      console.warn('⚠️ YOUTUBE_API_KEY not set, using minimal details');
+      return minimalDetails;
     }
     
     const response = await axios.get(
@@ -92,12 +95,13 @@ export async function getVideoDetails(videoId) {
           id: videoId,
           part: 'snippet,statistics,contentDetails',
         },
-        timeout: 10000, // 10 second timeout
+        timeout: 8000, // 8 second timeout
       }
     );
     
     if (!response.data.items || response.data.items.length === 0) {
-      throw new Error('Video not found');
+      console.warn('⚠️ Video not found in API response, using minimal details');
+      return minimalDetails;
     }
     
     const video = response.data.items[0];
@@ -113,33 +117,19 @@ export async function getVideoDetails(videoId) {
       url: `https://www.youtube.com/watch?v=${video.id}`,
     };
   } catch (error) {
+    // Log error but never throw - always return minimal details
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
       console.warn('⚠️ YouTube API timeout, using minimal details');
-      return {
-        videoId,
-        title: 'Video',
-        description: '',
-        thumbnail: '',
-        publishedAt: new Date().toISOString(),
-        duration: 0,
-        viewCount: 0,
-        likeCount: 0,
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-      };
+    } else if (error.response?.status === 403) {
+      console.warn('⚠️ YouTube API 403 (quota/access), using minimal details');
+    } else if (error.response?.status === 404) {
+      console.warn('⚠️ YouTube API 404 (video not found), using minimal details');
+    } else {
+      console.warn('⚠️ YouTube API error, using minimal details:', error.message || error.response?.statusText);
     }
-    console.error('Error fetching video details:', error.response?.data || error.message);
-    // Return minimal details instead of throwing to avoid blocking
-    return {
-      videoId,
-      title: 'Video',
-      description: '',
-      thumbnail: '',
-      publishedAt: new Date().toISOString(),
-      duration: 0,
-      viewCount: 0,
-      likeCount: 0,
-      url: `https://www.youtube.com/watch?v=${videoId}`,
-    };
+    
+    // Always return minimal details instead of throwing
+    return minimalDetails;
   }
 }
 

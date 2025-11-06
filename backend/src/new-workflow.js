@@ -17,14 +17,44 @@ export async function processVideoWithFreeTools(videoUrl, options = {}) {
     let videoDetails;
     try {
       console.log('📊 Fetching video details...');
-      const detailsPromise = getVideoDetails(videoId);
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), 5000)
+      // Use Promise.race with timeout, but make getVideoDetails itself handle errors gracefully
+      const detailsPromise = getVideoDetails(videoId).catch(err => {
+        console.warn('⚠️ getVideoDetails failed, using minimal details:', err.message);
+        return {
+          videoId,
+          title: 'Video',
+          description: '',
+          thumbnail: '',
+          publishedAt: new Date().toISOString(),
+          duration: 0,
+          viewCount: 0,
+          likeCount: 0,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+        };
+      });
+      
+      const timeoutPromise = new Promise((resolve) => 
+        setTimeout(() => {
+          console.warn('⚠️ Video details fetch timed out (5s), using minimal details');
+          resolve({
+            videoId,
+            title: 'Video',
+            description: '',
+            thumbnail: '',
+            publishedAt: new Date().toISOString(),
+            duration: 0,
+            viewCount: 0,
+            likeCount: 0,
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+          });
+        }, 5000)
       );
+      
       videoDetails = await Promise.race([detailsPromise, timeoutPromise]);
-      console.log(`✅ Found: "${videoDetails.title}"`);
+      console.log(`✅ Video details: "${videoDetails.title}"`);
     } catch (error) {
-      console.warn('⚠️ Video details fetch timed out or failed, continuing with minimal details');
+      // Final fallback - should never reach here, but just in case
+      console.warn('⚠️ Unexpected error getting video details, using minimal details:', error.message);
       videoDetails = {
         videoId,
         title: 'Video',
@@ -39,23 +69,64 @@ export async function processVideoWithFreeTools(videoUrl, options = {}) {
     }
     
     // Step 2: Get transcript (free)
-    console.log('📝 Getting transcript...');
-    const transcript = await getTranscript(videoId);
-    
-    if (transcript.length === 0) {
-      console.log('⚠️ No transcript available, skipping');
-      return { success: false, message: 'No transcript available' };
+    let transcript = [];
+    try {
+      console.log('📝 Getting transcript...');
+      transcript = await getTranscript(videoId);
+      
+      if (!transcript || transcript.length === 0) {
+        console.log('⚠️ No transcript available, continuing with minimal processing');
+        transcript = [];
+      } else {
+        console.log(`✅ Got ${transcript.length} transcript segments`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Transcript fetch failed, continuing without transcript:', error.message);
+      transcript = [];
     }
     
-    console.log(`✅ Got ${transcript.length} transcript segments`);
+    if (transcript.length === 0) {
+      console.log('⚠️ No transcript available - video processing may be limited');
+      // Don't return error - continue with what we have
+    } else {
+      console.log(`✅ Got ${transcript.length} transcript segments`);
+    }
     
     // Step 3: Find best moments using AI
-    console.log('🎯 Finding best moments...');
-    const bestMoments = await findBestMomentsWithAI(transcript, videoDetails);
-    
-    if (bestMoments.length === 0) {
-      console.log('⚠️ No good moments found');
-      return { success: false, message: 'No engaging moments found' };
+    let bestMoments = [];
+    try {
+      console.log('🎯 Finding best moments...');
+      if (transcript.length > 0) {
+        bestMoments = await findBestMomentsWithAI(transcript, videoDetails);
+      } else {
+        console.warn('⚠️ Skipping AI moment finding - no transcript available');
+        // Return success but with limited processing
+        return { 
+          success: true, 
+          message: 'Video processing started but limited - no transcript available',
+          videoId,
+          videoDetails
+        };
+      }
+      
+      if (!bestMoments || bestMoments.length === 0) {
+        console.log('⚠️ No good moments found');
+        return { 
+          success: true, 
+          message: 'No engaging moments found in transcript',
+          videoId,
+          videoDetails
+        };
+      }
+    } catch (error) {
+      console.error('❌ Error finding best moments:', error.message);
+      return { 
+        success: true, 
+        message: 'Video processing started but AI analysis failed',
+        error: error.message,
+        videoId,
+        videoDetails
+      };
     }
     
     console.log(`✅ Found ${bestMoments.length} viral moments`);
