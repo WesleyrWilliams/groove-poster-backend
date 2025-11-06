@@ -21,22 +21,6 @@ interface ContentItem {
   channel?: string
 }
 
-// AddLog utility to resolve usage of addLog across the file
-const useAddLog = (setLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>) => {
-  // Just adds a log entry to local logs
-  return (message: string, type: LogEntry['type']) => {
-    setLogs(prevLogs => [
-      ...prevLogs,
-      {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        message,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        type
-      }
-    ])
-  }
-}
-
 const GrooveSznDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [automationActive, setAutomationActive] = useState(true)
@@ -76,9 +60,6 @@ const GrooveSznDashboard = () => {
     { icon: '📤', label: 'Post', color: 'bg-orange-500' },
     { icon: '✅', label: 'Complete', color: 'bg-teal-500' }
   ]
-
-  // --- ADD LOCAL addLog that just logs to the UI ---
-  const addLog = useAddLog(setLogs)
 
   // Fetch stats on mount and periodically
   useEffect(() => {
@@ -787,9 +768,8 @@ const GrooveSznDashboard = () => {
                     try {
                       const response = await axios.get(`${backendUrl}/api/content-library`)
                       setContentLibrary(response.data)
-                      addLog('📚 Content library refreshed', 'success')
                     } catch (error) {
-                      addLog('❌ Error refreshing library', 'error')
+                      console.error('Error refreshing library:', error)
                     }
                   }
                   fetchLibrary()
